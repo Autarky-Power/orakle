@@ -16,7 +16,7 @@ midterm = orakle.add_holidays_mid_term(decomposed_data$midterm)
 midterm_all = orakle.get_weather_data(midterm)
 shortterm= orakle.add_holidays_short_term(decomposed_data$shortterm)
 
-short_term_data <- orakle.shortterm_lm_model(short_term_data2)
+short_term_data <- orakle.shortterm_lm_model(shortterm)
 
 longterm <- orakle.get_historic_load_data(decomposed_data$longterm)
 longterm_all_data= orakle.get_macro_economic_data(longterm)

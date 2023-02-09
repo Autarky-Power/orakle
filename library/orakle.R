@@ -547,6 +547,7 @@ orakle.fill_missing_entsoE_data <- function(entsoe_data){
 }
 # shortterm_lm_model ----
 orakle.shortterm_lm_model <- function(short_term_data){
+
   
   columns_original_df <- ncol(short_term_data)
   short_term_data[,c((columns_original_df+1):(columns_original_df+24))] <- 0
@@ -576,15 +577,18 @@ orakle.shortterm_lm_model <- function(short_term_data){
                     rep(wday[7],24))
   model.st[,3] <- 1:24
   
+  # define training and test set
+  training_set=nrow(short_term_data)- round(nrow(short_term_data)*training_set_ratio)
+  training_data=short_term_data[1:training_set,]
+  test_data=short_term_data[(training_set+1):nrow(short_term_data),]
+  
   # compute models and store results
   
   
-  if (! file.exists("models")){ 
-    dir.create("models")}
-  if (! file.exists(paste0("./models/",country))){ 
-    dir.create(paste0("./models/",country))}
-  if (! file.exists(paste0("./models/",country,"/shortterm_lm"))){ 
-    dir.create(paste0("./models/",country,"/shortterm_lm"))}
+  if (! file.exists(paste0("./",country,"./models/"))){ 
+    dir.create(paste0("./",country,"./models/"))}
+  if (! file.exists(paste0("./",country,"./models/shortterm_lm"))){ 
+    dir.create(paste0("./",country,"./models/shortterm_lm"))}
   
   k = 1
   l = 1
@@ -592,13 +596,13 @@ orakle.shortterm_lm_model <- function(short_term_data){
     for (j in 1:7){
       cat(paste("Processing model:",7*(i-1)+j,"of",12*7))  
       
-      x <- short_term_data[which(short_term_data$month == i & short_term_data$wday == wday[j]),]
-      xreg <- as.matrix(x[,c((columns_original_df+1):(columns_original_df+24))])
+      x <- training_data[which(training_data$month == i & training_data$wday == wday[j]),]
+      xreg <- as.matrix(x[,c((columns_original_df):(columns_original_df+24))])
       
-      fit1 <- lm(hourly_demand_trend_and_season_corrected ~ xreg[,1:23], data=x)
+      fit1 <- lm(hourly_demand_trend_and_season_corrected ~ xreg[,1:24], data=x)
       
       name=paste0("month",i,wday[j])
-      modelname=paste0("./models/",country,"/shortterm_lm/",name,".Rdata")
+      modelname=paste0("./",country,"/models/shortterm_lm/",name,".Rdata")
       save(fit1,file=modelname)
       fv <- data.frame(fit1$fitted.values)
       model_st[k:(k+23),(i+2)] <- fv[1:24,]
@@ -612,22 +616,24 @@ orakle.shortterm_lm_model <- function(short_term_data){
     k = 1
   }
   
-  if (! file.exists(file.path(paste0("./data/",country)),recursive=T)){
-    dir.create(file.path(paste0("./data/",country)),recursive = T)}
+
   
-  write.csv(model.st,paste0("./data/",country,"/shorttern_lm_model_fit.csv"),row.names = FALSE )
+
   
   ## combine the results
-  short_term_data$lm_model_fit <- vector(length=nrow(short_term_data))
+  short_term_data$short_term_lm_model_predictions <- vector(length=nrow(short_term_data))
   
   suppressWarnings(
   for (i in 1:12){
     for(j in 1:7){
-      short_term_data$lm_model_fit[which(short_term_data$month == i & short_term_data$wday == wday[j])] <- 
+      short_term_data$short_term_lm_model_predictions[which(short_term_data$month == i & short_term_data$wday == wday[j])] <- 
         model.st[which(model.st$month == i & model.st$wday == wday[j]),4]
     }
   })
   
+  if (! file.exists(paste0("./",country,"./data/"))){ 
+    dir.create(paste0("./",country,"./data/"))}
+  write.csv(short_term_data,paste0("./",country,"./data/short_term_data.csv"),row.names = F)
   return (short_term_data)
 }
 # add holidays midterm ----
@@ -873,7 +879,7 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
   
   best_lm_model<- lm(f,data=training_data)
   results<- predict(best_lm_model,longterm_all_data)
-  
+  country<- unique(longterm_all_data$country)
   lt_plot <- ggplot(longterm_all_data)+geom_line(aes(year,avg_hourly_demand,color="actual"))+
     geom_line(aes(year,results,color="fitted"))+xlab("\nYear")+ylab("Avg Hourly Demand\n [MW]\n")+
     geom_vline(xintercept=longterm_all_data$year[training_set],linetype=2)+
@@ -945,6 +951,8 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
     dir.create(country)} 
   if (! file.exists(paste0("./",country,"/models"))){ 
     dir.create(paste0("./",country,"/models"))}  
+  if (! file.exists(paste0("./",country,"/data"))){ 
+    dir.create(paste0("./",country,"/data"))}  
   if (! file.exists(paste0("./",country,"/plots"))){ 
     dir.create(paste0("./",country,"/plots"))}
   if (! file.exists(paste0("./",country,"/models/longterm"))){ 
@@ -952,8 +960,8 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
   save(best_lm_model,file=paste0("./",country,"/models/longterm/best_lm_model.Rdata"))
   
   ggsave(file=paste0("./",country,"/plots/Long_term_results.png"), plot=lt_plot2, width=12, height=8)
-  
   longterm_all_data$longterm_model_predictions <- results
+  write.csv(longterm_all_data,paste0("./",country,"/data/long_term_all_data.csv"),row.names = F)
   return(longterm_all_data)
 }
 
