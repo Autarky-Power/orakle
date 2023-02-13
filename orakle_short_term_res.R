@@ -25,10 +25,10 @@ test_data=short_term_data[(training_set+1):nrow(short_term_data),]
 
 month=c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 
-p_limit=3
-q_limit=3
+p_limit=30
+q_limit=30
 
-for (m in 1:12){
+for (m in 4:12){
   month_name=month[m]
   res <- training_data$residuals[training_data$month == m]
   testset <- test_data$residuals[test_data$month == m]

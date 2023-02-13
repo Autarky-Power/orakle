@@ -546,7 +546,7 @@ orakle.fill_missing_entsoE_data <- function(entsoe_data){
   return (complete_data)
 }
 # shortterm_lm_model ----
-orakle.shortterm_lm_model <- function(short_term_data){
+orakle.shortterm_lm_model <- function(short_term_data, training_set_ratio=0.2){
 
   
   columns_original_df <- ncol(short_term_data)
