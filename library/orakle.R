@@ -3,104 +3,6 @@ Sys.setlocale("LC_TIME", "English")
 
 
 
-#old fct ----
-# #orakle.get_historic_load_data <- function(country,overwrite){
-#   library(countrycode)  
-#   library(readxl)
-#   library(lubridate)
-#   
-#   if (! file.exists("country_data")){
-#     dir.create("country_data")}  
-#   
-#   country=countrycode(country, "country.name","iso2c")
-#   
-#   if (! file.exists(paste0("./country_data/",country))|overwrite==T){
-#     dir.create(paste0("./country_data/",country))
-#     
-#     
-#     
-#     entsodata <-read_excel("./Data/Monthly-hourly-load-values_2006-2015.xlsx")
-#     colnames(entsodata)[1:5]<- c("country","year","month","day","coverage_ratio")
-#     
-#     
-#     data <- entsodata[entsodata$country== country,]
-#     
-#     y <- vector(mode = "list", length = 0)
-#     x_year <- vector(mode = "list", length = 0)
-#     year_list <- vector(mode = "list", length = 0)
-#     x_coverage <- vector(mode = "list", length = 0)
-#     coverage_list <- vector(mode = "list", length = 0)
-#     
-#     
-#     for (i in 1:nrow(data)){
-#       x<- t(data[i,6:29])
-#       y<- c(y,x)
-#       x_year[1:24]<- data[i,2]
-#       year_list <- c(year_list,x_year)
-#       x_coverage[1:24]<- data[i,5]
-#       coverage_list <- c(coverage_list,x_coverage)  
-#     }
-#     
-#     
-#     
-#     data1 <- as.data.frame(t(y))
-#     data1 <- as.data.frame(as.numeric(t(data1)))
-#     colnames(data1)<- "load"
-# 
-#     data1$coverage_ratio <- as.numeric(coverage_list)
-#     data1$load_scaled_with_coverage_ratio <- data1$load /(data1$coverage/100)
-#     data1 <- data1[,2:8]
-#    
-#     
-#     year_list <- unique(data1$year)
-#     for (year in year_list){
-#       if (nrow(data1[data1$year==year,])<8000){
-#         data1 <- data1[!data1$year==year, ]
-#       }
-#     }
-#     
-#     ###
-#     entsodata2 <-read_excel("./Data/MHLV_data-2015-2017.xlsx")
-#  
-#     data2 <- entsodata2[entsodata2$CountryCode== country,]
-#     
-#     
-#     data2$year <- year(data2$DateUTC)
-#     colnames(data2)[c(8,9)] <- c("load","load_scaled_with_coverage_ratio")  
-#     data2 <- data2[-c(1,3,4,5)]
-#     year_list2 <- unique(data2$year)
-#     for (year in year_list2){
-#       if (nrow(data2[data2$year==year,])<8000){
-#         data2 <- data2[!data2$year==year, ]
-#       }
-#     }
-#     if (nrow(data2[data2$year==2015,])==8760){
-#       data1 <- data1[!data1$year==2015,]
-#     }else{data2 <- data2[!data2$year==2015, ]}
-#     
-#     
-#     alldata<- rbind(data1,data2)
-#     alldata <- alldata[! (alldata$month==2 & alldata$day==29),]
-#     alldata$index <- 1:nrow(alldata)
-#     
-#     checkplot <-ggplot(alldata)+geom_line(aes(index,load,color="before_coverage"))+
-#       geom_line(aes(index,demand,color="actual"))
-#     
-#     print(checkplot)
-#     
-#     alldata$date <- paste0(alldata$year,"-",alldata$month,"-",alldata$day,
-#                          "-",alldata$hour)
-#     alldata$date <- as.POSIXct(alldata$date,"%Y-%m-%d-%H")
-#     alldata$wday <- wday(alldata$date, label=T)
-#     alldata$country <- country
-#     write.csv(alldata,paste0("./country_data/",country,"/alldata_2006_2015_",country,".csv"),row.names = FALSE)
-#     print(paste("Data from",alldata$year[1],"to",alldata$year[nrow(alldata)]))
-#     return(alldata)
-#   }else {print('already exists')
-#     alldata <-read.csv(paste0("./country_data/",country,"/alldata_2006_2015_",country,".csv"))
-#     print(paste("Data from",alldata$year[1],"to",alldata$year[nrow(alldata)]))
-#     return(alldata)
-#   }
 # get_historic_load_data ----  
 orakle.get_historic_load_data <- function(longterm){
   
@@ -789,16 +691,10 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
   ctrl <- caret::trainControl(method = "repeatedcv", number = 5, repeats = 5)
   
   
-  results <- data.frame(matrix(nrow = testquant,ncol=4))
-  colnames(results)= c("RMSE_k_fold","Rsquare_k_fold","MAE_k_fold","index")
-  
   message(paste("Cross-validating the best",testquant,"models."))
-  
-  for (i in 1:testquant){
+  cross_val <- function(i){
     tryCatch({
-      cat(paste0("Cross Validation\n",round(i / testquant * 100), '% completed.  (Reduce testquant argument if it takes too long.)'))  
       predictor_names=combinations[i,2:(ncol(combinations)-5)] 
-      results$index[i] <- i
       model_variables=colnames(predictor_names)[complete.cases(t(predictor_names))] 
       lm_formula <- as.formula(paste("avg_hourly_demand", paste(model_variables, collapse = " + "), 
                                      sep = " ~ "))
@@ -807,13 +703,24 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
       Kfold <- caret::train(lm_formula, data = training_data, 
                             trControl = ctrl, method = "lm")
       
-      results$RMSE_k_fold[i] <- Kfold$results$RMSE
-      results$Rsquare_k_fold[i] <- Kfold$results$Rsquared
-      results$MAE_k_fold[i] <- Kfold$results$MAE
-      if (i == testquant) cat(': Done')
-      else cat('\014')
     },error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    return(c(Kfold$results$RMSE,Kfold$results$Rsquared,Kfold$results$MAE,i))
   }
+  # Parallel Processing
+  no_cores <- parallel::detectCores(logical = TRUE)
+  cl <- parallel::makeCluster(floor(no_cores*0.75))  
+  doParallel::registerDoParallel(cl) 
+  testquantnums<- 1:testquant
+  clusterExport(cl,list("cross_val","testquantnums","combinations","ctrl","training_data","rdm"))
+  
+  results_list<-  parLapply(cl,testquantnums,cross_val)
+  
+  doParallel::stopImplicitCluster()
+  parallel::stopCluster(cl)
+  
+  results <-as.data.frame(do.call(rbind, results_list))
+  colnames(results)= c("RMSE_k_fold","Rsquare_k_fold","MAE_k_fold","index")
+  
   
   best_index_RMSE = results$index[results["RMSE_k_fold"] == min(results["RMSE_k_fold"],na.rm = T)]
   best_value_RMSE = results[best_index_RMSE, "RMSE_k_fold"]
@@ -832,7 +739,7 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
   best_value_Rsquare = results[best_index_Rsquare, "Rsquare_k_fold"]
   limit_Rsquare = best_value_Rsquare / 1.3 
   message(paste("Highest Rsquare of",round(best_value_Rsquare,3),"for model no.",best_index_Rsquare,". Rsquare limit is set to"
-        ,round(limit_Rsquare,3)))
+                ,round(limit_Rsquare,3)))
   
   mask_RMSE = results["RMSE_k_fold"] <= limit_RMSE     
   mask_MAE = results["MAE_k_fold"] <= limit_MAE 
