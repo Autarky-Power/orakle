@@ -19,8 +19,27 @@ shortterm= orakle.add_holidays_short_term(decomposed_data$shortterm)
 short_term_data <- orakle.shortterm_lm_model(shortterm)
 
 longterm <- orakle.get_historic_load_data(decomposed_data$longterm)
-longterm_all_data= orakle.get_macro_economic_data(longterm)
-longterm_all_data_predicted = orakle.long_term_lm(longterm_all_data)
+longterm_all_data <- orakle.get_macro_economic_data(longterm)
+
+system.time(
+longterm_all_data_predicted <- orakle.long_term_lm(longterm_all_data)
+)
+
+for (countryname in domain_df$countrynames){
+  tryCatch({
+  print(countryname)
+  demand_data = orakle.get_entsoE_data(2017,2021,countryname)
+  demand_data_filled = orakle.fill_missing_entsoE_data(demand_data)
+  decomposed_data = orakle.decompose_load_data(demand_data_filled)
+  longterm <- orakle.get_historic_load_data(decomposed_data$longterm)
+  longterm_all_data <- orakle.get_macro_economic_data(longterm)
+  longterm_all_data_predicted <- orakle.long_term_lm(longterm_all_data)},
+  error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+
+
+
 
 longterm$avg_hourly_demand[12]=mean(demand_data$load[demand_data$year==2021])
 
@@ -79,5 +98,29 @@ all_countries_dataset2 <-unique(entsodata2$CountryCode)
 
 all_countries[! all_countries %in% all_countries_dataset2] 
 all_countries_dataset2[! all_countries_dataset2 %in% all_countries] 
+
+
+
+
+
+
+######### function in fucntion testing ----
+
+t_func1<- function(a){
+  print(a)
+  t_func2 <- function(b){
+    print(b)
+    return(b-1)
+  }
+  print(t_func2(a))
+}
+
+t_func1(7)
+
+
+
+
+
+
 
 
