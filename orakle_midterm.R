@@ -5,7 +5,7 @@ midterm_all_data <- midterm_all$midterm
 #midterm_all_data[,37:56]<- temps[,2:21]
 #colnames(midterm_all_data)<-gsub(' ','_',colnames(midterm_all_data))
 #midterm_all_data<- midterm_all_data[-c(1461:1825),]
-
+training_set_ratio=0.2
 
 month_list=c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Nov","Dec")
 
@@ -54,7 +54,7 @@ midterm_all_data$weighted_temperaturelag1[1]<- midterm_all_data$weighted_tempera
 midterm_all_data$weighted_temperaturelag2 <- dplyr::lag(midterm_all_data$weighted_temperature, n = 2)
 midterm_all_data$weighted_temperaturelag2[1:2]<- midterm_all_data$weighted_temperaturelag1[1:2]
 
-training_set_ratio=0.2
+
 training_set=nrow(midterm_all_data)- round(nrow(midterm_all_data)*training_set_ratio)
 training_data=midterm_all_data[1:training_set,]
 test_data=midterm_all_data[(training_set+1):nrow(midterm_all_data),]
@@ -63,15 +63,13 @@ test_data=midterm_all_data[(training_set+1):nrow(midterm_all_data),]
 variables3 <- colnames(midterm_all_data)[c(9:(ncol(midterm_all_data)))]
 
 
-f3 <- as.formula(
-  paste("seasonal_avg_hourly_demand", 
-        paste(variables3, collapse = " + "), 
+f3 <- as.formula(  paste("seasonal_avg_hourly_demand",paste(variables3, collapse = " + "), 
         sep = " ~ "))
 
 globalmodel3 <- lm(f3 , data=training_data, na.action = "na.omit")
 MuMIn::AICc(globalmodel3)
 summary(globalmodel3)
-? lm()
+
 library(glmnet)
 #define response variable
 y <- training_data$seasonal_avg_hourly_demand

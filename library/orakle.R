@@ -370,7 +370,7 @@ orakle.get_entsoE_data <- function(start_year,end_year,country){
   for (i in start:end){
     starting_year=i
     print(paste("Getting data for",i))
-    entso_response = httr::GET(paste0("https://transparency.entsoe.eu/api?securityToken=5ca5937c-7eae-4302-b444-5042ab55d8ef&documentType=A65&processType=A16&outBiddingZone_Domain=",domain,"&periodStart=",starting_year,"01010000&periodEnd=",(starting_year+1),"01010000"))
+    entso_response = httr::GET(paste0("https://web-api.tp.entsoe.eu/api?securityToken=5ca5937c-7eae-4302-b444-5042ab55d8ef&documentType=A65&processType=A16&outBiddingZone_Domain=",domain,"&periodStart=",starting_year,"01010000&periodEnd=",(starting_year+1),"01010000"))
     
     entso_content <- httr::content(entso_response, encoding = "UTF-8")
     entso_content_list <- xml2::as_list(entso_content)
@@ -711,9 +711,9 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
   cl <- parallel::makeCluster(floor(no_cores*0.75))  
   doParallel::registerDoParallel(cl) 
   testquantnums<- 1:testquant
-  clusterExport(cl,list("cross_val","testquantnums","combinations","ctrl","training_data","rdm"))
+  #parallel::clusterExport(cl,list("cross_val","testquantnums","combinations","ctrl","training_data","rdm"),environment=environment())
   
-  results_list<-  parLapply(cl,testquantnums,cross_val)
+  results_list<-  parallel::parLapply(cl,testquantnums,cross_val)
   
   doParallel::stopImplicitCluster()
   parallel::stopCluster(cl)
