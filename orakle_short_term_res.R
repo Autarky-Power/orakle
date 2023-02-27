@@ -171,5 +171,41 @@ for (k in 1:q_limit){
 
 
 
+########## Arima tests ----
+library(forecast)
 
+res1 <- training_data$residuals[training_data$month == 1 & training_data$wday!="Sun" &
+                                  training_data$wday !="Sat"]
+testset1 <- test_data$residuals[test_data$month == 1]
+res2 <- training_data$residuals[training_data$month == 2]
+testset2 <- test_data$residuals[test_data$month == 2]
+
+model1 <- Arima(res2, order = c(26,0,26))
+model2 <- auto.arima(res1)
+checkresiduals(res1)
+
+refit <- Arima(res1[1:2184], model=model1)  
+plot(forecast(refit,h = 24))
+
+ggplot()+ geom_line(aes(2924:3000,c(refit$fitted,forecast(refit,h = 24)$mean),color="fit"))+
+  geom_line(aes(2924:3000,c(res1[2924:2976],testset2[1:24]),color="actual"))
+
+sum(abs(testset2[1:24]-forecast(refit,h = 24)$mean))/
+sum(abs(testset2[1:24]))
+
+a <- vector(length = length(testset2))
+a[1:672]<- forecast(refit,h = 24)$mean
+
+
+ggplot()+ geom_line(aes(1:length(a),a,color="fit"))+
+  geom_line(aes(1:length(a),testset2,color="actual"))
+
+sum(abs(testset2-a))/
+  sum(abs(testset2))
+
+
+ggplot()+ geom_line(aes(1:nrow(short_term_data[short_term_data$month==2,]),short_term_data$residuals[short_term_data$month==2],color="fit"))#+
+  geom_line(aes(1:length(a),testset2,color="actual"))
+
+  
 

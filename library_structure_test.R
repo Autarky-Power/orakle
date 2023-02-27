@@ -9,22 +9,34 @@ source('./library/orakle.R')
 
 #### Testing ----
 
-demand_data = orakle.get_entsoE_data(2017,2021,"Poland")
+# Get and prepare intial Data
+demand_data = orakle.get_entsoE_data(2017,2021,"Spain")
 demand_data_filled = orakle.fill_missing_entsoE_data(demand_data)
 decomposed_data = orakle.decompose_load_data(demand_data_filled)
-midterm = orakle.add_holidays_mid_term(decomposed_data$midterm)
-midterm_all = orakle.get_weather_data(midterm)
-shortterm= orakle.add_holidays_short_term(decomposed_data$shortterm)
-
-short_term_data <- orakle.shortterm_lm_model(shortterm)
-
+# Longterm model
 longterm <- orakle.get_historic_load_data(decomposed_data$longterm)
 longterm_all_data <- orakle.get_macro_economic_data(longterm)
+longterm_all_data_predicted <- orakle.long_term_lm(longterm_all_data)
+# Midterm model
+midterm = orakle.add_holidays_mid_term(decomposed_data$midterm)
+midterm_all = orakle.get_weather_data(midterm)
+midterm_all_data_predicted = orakle.mid_term_lm(midterm_all$midterm)
+# Shortterm model
+shortterm= orakle.add_holidays_short_term(decomposed_data$shortterm)
+short_term_data <- orakle.shortterm_lm_model(shortterm)
+
+
+
+
+
+#### Different tests, this can be ignored ---- 
+
 
 system.time(
 longterm_all_data_predicted <- orakle.long_term_lm(longterm_all_data)
 )
 
+## all countries registered by entsoE
 for (countryname in domain_df$countrynames){
   tryCatch({
   print(countryname)
@@ -38,9 +50,21 @@ for (countryname in domain_df$countrynames){
 }
 
 
+# Colombia ----
+library(lubridate)
+
+colombian_data <- read.csv("C:/Users/Konstantin/Documents/water4whom/processed_data/Demanda_Energia_all_data.csv", fileEncoding="latin1")
+
+entsoe_data<- colombian_data
+entsoe_data <- entsoe_data[!is.na(entsoe_data$Date),]
+entsoe_data$year <- year(colombian_data$Fecha)
+entsoe_data$time_interval <- "day"
+colnames(entsoe_data)[1:2] <- c("Date","load")
+entsoe_data$Date <- as.POSIXct(entsoe_data$Date,tz="UTC")
 
 
 
+###
 longterm$avg_hourly_demand[12]=mean(demand_data$load[demand_data$year==2021])
 
 mean(demand_data$load[demand_data$year==2021])

@@ -105,7 +105,7 @@ orakle.get_historic_load_data <- function(longterm){
 orakle.decompose_load_data <- function(all_data){
      
   library(ggplot2)
-  library(patchwork)
+  #library(patchwork)
   
   timepoint <- seq(as.POSIXct(paste0(as.character(min(unique(all_data$year))),'-01-01 00:00')),
                    as.POSIXct(paste0(as.character(max(unique(all_data$year))),'-12-31 23:00')),by="hour")
@@ -444,6 +444,14 @@ orakle.fill_missing_entsoE_data <- function(entsoe_data){
   complete_data$year <- lubridate::year(complete_data$Date)
   complete_data$time_interval <- unique(entsoe_data$time_interval)
   complete_data$country <- unique(entsoe_data$country)
+  country <- unique(entsoe_data$country)
+  if (! file.exists(country)){ 
+    dir.create(country)} 
+  if (! file.exists(paste0("./",country,"/data"))){ 
+    dir.create(paste0("./",country,"/data"))}  
+  
+  write.csv(complete_data,paste0("./",country,"/data/entsoE_load_data.csv"),row.names = F)
+  
   
   return (complete_data)
 }
@@ -655,6 +663,12 @@ orakle.get_weather_data <- function(midterm){
   
   midterm$weighted_temperature<- temp_df$weighted_mean_temperature[temp_df$date %in% midterm$date]
   
+  if (! file.exists(country)){ 
+    dir.create(country)} 
+  if (! file.exists(paste0("./",country,"/data"))){ 
+    dir.create(paste0("./",country,"/data"))}  
+  write.csv(temp_df,paste0("./",country,"/data/temperatures.csv"),row.names = F)
+  write.csv(midterm,paste0("./",country,"/data/midterm_data.csv"),row.names = F)
   
   return(list("midterm"=midterm, "temperature_data"=temp_df))
   
@@ -959,6 +973,7 @@ orakle.mid_term_lm <- function(midterm_all_data, training_set_ratio=0.2){
   testlasso<-predict(best_model, s = best_lambda, newx = x_test)
   testlm<-predict(globalmodel, newdata=test_data)
   
+  country = unique(midterm_all_data$country)
   if (! file.exists(country)){ 
     dir.create(country)} 
   if (! file.exists(paste0("./",country,"/models"))){ 
