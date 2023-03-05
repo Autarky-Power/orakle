@@ -2,7 +2,7 @@ library(tseries)
 library(forecast)
 library(MuMIn)
 
-
+getwd()
 country="PL"
 short_term_data <- read.csv(paste0("./",country,"./data/short_term_data.csv"))
 
@@ -14,8 +14,10 @@ if (! file.exists(paste0("./",country,"./data"))){
 if (! file.exists(paste0("./",country,"./models/shortterm_stochastic"))){ 
   dir.create(paste0("./",country,"./models/shortterm_stochastic"))}
 
+
 # calculate residuals
 short_term_data$residuals <- short_term_data$hourly_demand_trend_and_season_corrected - short_term_data$short_term_lm_model_predictions 
+
 
 # split data into training and test set 
 training_set_ratio=0.2
