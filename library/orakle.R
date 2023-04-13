@@ -105,7 +105,7 @@ orakle.get_historic_load_data <- function(longterm){
 orakle.decompose_load_data <- function(all_data){
      
   library(ggplot2)
-  #library(patchwork)
+  library(patchwork)
   
   timepoint <- seq(as.POSIXct(paste0(as.character(min(unique(all_data$year))),'-01-01 00:00')),
                    as.POSIXct(paste0(as.character(max(unique(all_data$year))),'-12-31 23:00')),by="hour")

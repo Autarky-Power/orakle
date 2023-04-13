@@ -10,7 +10,7 @@ source('./library/orakle.R')
 #### Testing ----
 
 # Get and prepare intial Data
-demand_data = orakle.get_entsoE_data(2017,2021,"Spain")
+demand_data = orakle.get_entsoE_data(2017,2021,"Luxembourg")
 demand_data_filled = orakle.fill_missing_entsoE_data(demand_data)
 decomposed_data = orakle.decompose_load_data(demand_data_filled)
 # Longterm model
@@ -52,17 +52,44 @@ for (countryname in domain_df$countrynames){
 
 # Colombia ----
 library(lubridate)
-
+load("./CO/models/longterm/best_lm_model.Rdata")
 colombian_data <- read.csv("C:/Users/Konstantin/Documents/water4whom/processed_data/Demanda_Energia_all_data.csv", fileEncoding="latin1")
 
 entsoe_data<- colombian_data
-entsoe_data <- entsoe_data[!is.na(entsoe_data$Date),]
-entsoe_data$year <- year(colombian_data$Fecha)
-entsoe_data$time_interval <- "day"
 colnames(entsoe_data)[1:2] <- c("Date","load")
+entsoe_data <- entsoe_data[!is.na(entsoe_data$Date),]
+entsoe_data$year <- year(entsoe_data$Date)
+entsoe_data$time_interval <- "day"
+
 entsoe_data$Date <- as.POSIXct(entsoe_data$Date,tz="UTC")
+entsoe_data$country <- "CO"
+
+summary(best_lm_model)
+
+complete_data <- complete_data[complete_data$Date %in% entsoe_data$Date,]
+hourly_data <- complete_data
+
+write.csv(longterm,"./colombia_longterm.csv",row.names=F)
+longterm <- read.csv("./colombia_longterm.csv")
+longterm$country <- "CO"
+midterm<- all_data
+colnames(midterm)[2]<- "avg_hourly_demand"
+midterm$seasonal_avg_hourly_demand <-0
+for (i in min(all_data$year):max(all_data$year)){
+  midterm$seasonal_avg_hourly_demand[midterm$year==i] <- midterm$avg_hourly_demand[midterm$year==i]-
+    longterm$avg_hourly_demand[longterm$year==i]  
+}
+
+trend_plot<- ggplot(longterm)+geom_line(aes(year,avg_hourly_demand, color="Average hourly demand"),linewidth=1.1)+
+  theme(legend.title = element_blank()) +ggtitle('Long term trend \n')+
+  theme(plot.title = element_text(hjust = 0.5))+ylab("MW")
+
+midterm_seasonality_plot <-  ggplot(midterm)+geom_line(aes(1:nrow(midterm),seasonal_avg_hourly_demand, color="Average hourly demand"),linewidth=1.1)+
+  theme(legend.title = element_blank()) +ggtitle('Mid-term seasonality \n')+
+  theme(plot.title = element_text(hjust = 0.5))+ylab("MW")+xlab("Day")
 
 
+write.csv(midterm,"./colombia_midterm.csv",row.names=F)
 
 ###
 longterm$avg_hourly_demand[12]=mean(demand_data$load[demand_data$year==2021])
@@ -74,7 +101,7 @@ MAE(short_term_data$lm_model_fit[1:35016] , short_term_data$hourly_demand_trend_
 short_term_data[short_term_data$hourly_demand_trend_and_season_corrected==0,]
 
 ggplot(short_term_data)+ geom_line(aes(1:nrow(short_term_data),hourly_demand_trend_and_season_corrected,color="actual"),alpha=0.5)+
-  geom_line(aes(1:nrow(short_term_data),lm_model_fit,color="fit"))
+  geom_line(aes(1:nrow(short_term_data),short_term_lm_model_predictions,color="fit"))
 
 
 
