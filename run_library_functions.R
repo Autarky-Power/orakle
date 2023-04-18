@@ -1,3 +1,12 @@
+# Check if required packages are installed and install them if not
+
+packages <- c("caret","countrycode","doParallel","dplyr","ggplot2","ggthemes","glmnet","httr",
+              "jsonlite","lubridate","MLmetrics","MuMIn","parallel","patchwork","purrr","R.utils",
+              "readxl", "xml2")
+
+install.packages(setdiff(packages, rownames(installed.packages()))) 
+
+# Preload ggplot for faster plotting
 library(ggplot2)
 
 # Setting working directory
@@ -10,7 +19,7 @@ source('./library/orakle.R')
 #### Testing ----
 
 # Get and prepare intial Data
-demand_data = orakle.get_entsoE_data(2017,2021,"Ireland")
+demand_data = orakle.get_entsoE_data(2017,2021,"France")
 demand_data_filled = orakle.fill_missing_entsoE_data(demand_data)
 decomposed_data = orakle.decompose_load_data(demand_data_filled)
 # Longterm model
