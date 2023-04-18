@@ -107,41 +107,48 @@ orakle.decompose_load_data <- function(all_data){
   library(ggplot2)
   library(patchwork)
   
+  resolution <- as.numeric(difftime(all_data$Date[2], all_data$Date[1],units="hours"))
+  
+  if (resolution <= 1){
   timepoint <- seq(as.POSIXct(paste0(as.character(min(unique(all_data$year))),'-01-01 00:00')),
                    as.POSIXct(paste0(as.character(max(unique(all_data$year))),'-12-31 23:00')),by="hour")
-  hourly_data <- as.data.frame(timepoint) 
-  colnames(hourly_data)<- "Date"
-  hourly_data$year <- lubridate::year(hourly_data$Date)
-  hourly_data$month <- lubridate::month(hourly_data$Date)
-  hourly_data$day <- lubridate::day(hourly_data$Date)
-  hourly_data$hour <- lubridate::hour(hourly_data$Date)
-  hourly_data$wday <- lubridate::wday(hourly_data$Date,label = T,locale = "English")
-  if (all_data$time_interval[1] == "15 mins"){
-  hourly_data$load <- colMeans(matrix(all_data$load, nrow=4))
-  } else if (all_data$time_interval[1] == "30 mins"){
-    hourly_data$load <- colMeans(matrix(all_data$load, nrow=2))
-  }else{
-    hourly_data$load <- all_data$load
+  } else{  
+  timepoint <- seq(as.POSIXct(paste0(as.character(min(unique(all_data$year))),'-01-01')),
+                            as.POSIXct(paste0(as.character(max(unique(all_data$year))),'-12-31')),by="day")
   }
   
-  hourly_data$unit <- unique(all_data$unit)
-  hourly_data$country <- unique(all_data$country)
+  ordered_data <- as.data.frame(timepoint) 
+  colnames(ordered_data)<- "Date"
+  ordered_data$year <- lubridate::year(ordered_data$Date)
+  ordered_data$month <- lubridate::month(ordered_data$Date)
+  ordered_data$day <- lubridate::day(ordered_data$Date)
+  ordered_data$wday <- lubridate::wday(ordered_data$Date,label = T,locale = "English")
+  suppressWarnings(
+  if (resolution <= 1){
+  ordered_data$hour <- lubridate::hour(ordered_data$Date)
+  if (all_data$time_interval[1] == "15 mins"){
+  ordered_data$load <- colMeans(matrix(all_data$load, nrow=4))
+  } else if (all_data$time_interval[1] == "30 mins"){
+    ordered_data$load <- colMeans(matrix(all_data$load, nrow=2))
+  }else{
+    ordered_data$load <- all_data$load
+  }} else{ordered_data$load <- all_data$load}
+)
+  ordered_data$unit <- unique(all_data$unit)
+  ordered_data$country <- unique(all_data$country)
   
-  all_data <- hourly_data
-
+  all_data <- ordered_data
   all_data <- all_data[! (all_data$month==2 & all_data$day==29),]
 
-  length(unique(all_data$year))
   longterm <- data.frame(matrix(nrow=length(unique(all_data$year)),ncol=3))
   colnames(longterm)<- c("country","year","avg_hourly_demand")
   longterm$year <- unique(all_data$year)
   country=unique(all_data$country)
   longterm$country<- country
   for (i in (min(longterm$year):max(longterm$year))){
-    
     longterm$avg_hourly_demand[longterm$year==i]<- mean(all_data$load[all_data$year==i],na.rm = T)
   }
-
+  if (resolution <= 1){
   midterm <- data.frame(matrix(nrow=(length(unique(all_data$year))*365),ncol=7))
   colnames(midterm)<- c("country","date","year","month","day","wday","avg_hourly_demand")
   
@@ -158,13 +165,20 @@ orakle.decompose_load_data <- function(all_data){
   }
   midterm$date <- as.POSIXct(midterm$date, format="%Y-%m-%d",origin = "1970-01-01")
   midterm$date <-as.Date(midterm$date, format="%Y-%m-%d","CET")
+  midterm$country<- country}else{
+    midterm <- data.frame(matrix(nrow=nrow(ordered_data),ncol=7))
+    midterm[,1:7] <- ordered_data[,c(8,1:6)]
+    colnames(midterm)<- c("country","date","year","month","day","wday","avg_hourly_demand")
+  }
+  
   midterm$seasonal_avg_hourly_demand <-0
   for (i in min(all_data$year):max(all_data$year)){
     midterm$seasonal_avg_hourly_demand[midterm$year==i] <- midterm$avg_hourly_demand[midterm$year==i]-
       longterm$avg_hourly_demand[longterm$year==i]  
   }
-  midterm$country<- country
   
+  
+  if (resolution <= 1){
   shortterm <- data.frame(matrix(nrow=(nrow(all_data)),ncol=1))
   colnames(shortterm) <- "country"
   
@@ -190,7 +204,10 @@ orakle.decompose_load_data <- function(all_data){
     shortterm$hourly_demand_trend_and_season_corrected[((i-1)*24+1):(i*24)] <- 
       shortterm$hourly_demand_trend_corrected[((i-1)*24+1):(i*24)]- midterm$seasonal_avg_hourly_demand[i]   
   }
-  
+  shortterm_seasonality_plot <-  ggplot(shortterm)+geom_line(aes(1:nrow(shortterm),hourly_demand_trend_and_season_corrected, color="Average hourly demand"),linewidth=1.1)+
+    theme(legend.title = element_blank()) +ggtitle('Short-term seasonality \n')+
+    theme(plot.title = element_text(hjust = 0.5))+ylab("MW")+xlab("Hour")
+  }
   
   trend_plot<- ggplot(longterm)+geom_line(aes(year,avg_hourly_demand, color="Average hourly demand"),linewidth=1.1)+
     theme(legend.title = element_blank()) +ggtitle('Long term trend \n')+
@@ -200,15 +217,18 @@ orakle.decompose_load_data <- function(all_data){
     theme(legend.title = element_blank()) +ggtitle('Mid-term seasonality \n')+
     theme(plot.title = element_text(hjust = 0.5))+ylab("MW")+xlab("Day")
   
-  shortterm_seasonality_plot <-  ggplot(shortterm)+geom_line(aes(1:nrow(shortterm),hourly_demand_trend_and_season_corrected, color="Average hourly demand"),linewidth=1.1)+
-    theme(legend.title = element_blank()) +ggtitle('Short-term seasonality \n')+
-    theme(plot.title = element_text(hjust = 0.5))+ylab("MW")+xlab("Hour")
-  
+
+  if (resolution <= 1){
   all_plots <- trend_plot / midterm_seasonality_plot / shortterm_seasonality_plot
-  
   print(all_plots)
   
   return(list("longterm"=longterm, "midterm"=midterm, "shortterm"=shortterm))
+  } else{
+    all_plots <- trend_plot / midterm_seasonality_plot 
+    print(all_plots)
+    
+    return(list("longterm"=longterm, "midterm"=midterm))
+  }
 }
 # get_macro_economic_data ----
 orakle.get_macro_economic_data <- function(longterm){
@@ -303,7 +323,7 @@ orakle.get_macro_economic_data <- function(longterm){
   return(longterm)
 }
 # get_entsoE_data ----
-orakle.get_entsoE_data <- function(start_year,end_year,country){
+orakle.get_entsoE_data <- function(start_year,end_year,country,api_key="5ca5937c-7eae-4302-b444-5042ab55d8ef"){
   
   # Convert country names to iso2c code ----
   if (country != "United Kingdom"){
@@ -370,7 +390,7 @@ orakle.get_entsoE_data <- function(start_year,end_year,country){
   for (i in start:end){
     starting_year=i
     print(paste("Getting data for",i))
-    entso_response = httr::GET(paste0("https://web-api.tp.entsoe.eu/api?securityToken=5ca5937c-7eae-4302-b444-5042ab55d8ef&documentType=A65&processType=A16&outBiddingZone_Domain=",domain,"&periodStart=",starting_year,"01010000&periodEnd=",(starting_year+1),"01010000"))
+    entso_response = httr::GET(paste0("https://web-api.tp.entsoe.eu/api?securityToken=",api_key,"&documentType=A65&processType=A16&outBiddingZone_Domain=",domain,"&periodStart=",starting_year,"01010000&periodEnd=",(starting_year+1),"01010000"))
     
     entso_content <- httr::content(entso_response, encoding = "UTF-8")
     entso_content_list <- xml2::as_list(entso_content)
@@ -457,8 +477,9 @@ orakle.fill_missing_entsoE_data <- function(entsoe_data){
 }
 # shortterm_lm_model ----
 orakle.shortterm_lm_model <- function(short_term_data, training_set_ratio=0.2){
+  library(ggplot2)
+  library(patchwork)
 
-  
   columns_original_df <- ncol(short_term_data)
   short_term_data[,c((columns_original_df+1):(columns_original_df+24))] <- 0
   for (i in (0:23)){
@@ -544,6 +565,155 @@ orakle.shortterm_lm_model <- function(short_term_data, training_set_ratio=0.2){
   if (! file.exists(paste0("./",country,"./data/"))){ 
     dir.create(paste0("./",country,"./data/"))}
   write.csv(short_term_data,paste0("./",country,"./data/short_term_data.csv"),row.names = F)
+  
+  colnames(short_term_data) <- make.unique(names(short_term_data))
+  
+  st_plot <- ggplot(short_term_data)+geom_line(aes(date,hourly_demand_trend_and_season_corrected,color="actual"))+
+    geom_line(aes(date,short_term_lm_model_predictions,color="fitted"))+
+    geom_vline(xintercept=test_data$date[1],linetype=2)+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("[MW]\n")+
+    ggtitle(paste("Short Term Model Results -",country,"\n"))+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())
+  
+  print(st_plot)
+
+  week_start <- which(short_term_data$wday[(nrow(short_term_data2)/2):(nrow(short_term_data2)/2+200)]==
+                        "Mon")[1]+(nrow(short_term_data2)/2)
+  sample_year <- short_term_data$year[week_start]
+  
+  st_plot_sample_week <- ggplot(short_term_data[week_start:(week_start+335),])+geom_line(aes(date,hourly_demand_trend_and_season_corrected,color="actual"))+
+    geom_line(aes(date,short_term_lm_model_predictions,color="fitted"))+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("[MW]\n")+
+    ggtitle(paste("Short Term Model Results -",country),subtitle = paste("2 sample weeks in",sample_year,"\n") )+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())
+
+  print(st_plot_sample_week)
+
+  if (! file.exists(paste0("./",country,"/plots"))){ 
+    dir.create(paste0("./",country,"/plots"))}
+  
+  st_plot2 <-ggplot(short_term_data)+geom_line(aes(date,hourly_demand_trend_and_season_corrected,color="actual"))+
+    geom_line(aes(date,short_term_lm_model_predictions,color="fitted"))+
+    geom_vline(xintercept=test_data$date[1],linetype=2)+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("[MW]\n")+
+    ggtitle(paste("Short Term Model Results -",country,"\n"))+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())+
+    theme(axis.title=element_text(size=23))+
+    theme(legend.text=element_text(size=23))+
+    theme(axis.text=element_text(size=20))+
+    theme(plot.title = element_text(size=26))
+  
+  ggsave(file=paste0("./",country,"/plots/short_term_results.png"), plot=st_plot2, width=12, height=8)
+  
+  st_plot_sample_week2 <- ggplot(short_term_data[week_start:(week_start+335),])+geom_line(aes(date,hourly_demand_trend_and_season_corrected,color="actual"))+
+    geom_line(aes(date,short_term_lm_model_predictions,color="fitted"))+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("[MW]\n")+
+    ggtitle(paste("Short Term Model Results -",country),subtitle = paste("2 sample weeks in",sample_year,"\n") )+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())+
+    theme(axis.title=element_text(size=23))+
+    theme(legend.text=element_text(size=23))+
+    theme(axis.text=element_text(size=20))+
+    theme(plot.title = element_text(size=26))+
+    theme(plot.subtitle = element_text(size=20,hjust = 0.5))
+  
+  
+  
+  ggsave(file=paste0("./",country,"/plots/short_term_results_sample_weeks.png"), plot=st_plot_sample_week2, width=12, height=8)
+  
+  
   return (short_term_data)
 }
 # add holidays midterm ----
@@ -888,6 +1058,8 @@ orakle.long_term_lm<- function(longterm_all_data,training_set_ratio=0.1,testquan
   ggsave(file=paste0("./",country,"/plots/Long_term_results.png"), plot=lt_plot2, width=12, height=8)
   longterm_all_data$longterm_model_predictions <- results
   write.csv(longterm_all_data,paste0("./",country,"/data/long_term_all_data.csv"),row.names = F)
+  
+  longterm_all_data$training_set_ratio = training_set_ratio
   return(longterm_all_data)
 }
 # Mid Term Model ----
@@ -971,8 +1143,9 @@ orakle.mid_term_lm <- function(midterm_all_data, training_set_ratio=0.2){
   
   
   testlasso<-predict(best_model, s = best_lambda, newx = x_test)
+  suppressWarnings(
   testlm<-predict(globalmodel, newdata=test_data)
-  
+  )
   country = unique(midterm_all_data$country)
   if (! file.exists(country)){ 
     dir.create(country)} 
@@ -984,14 +1157,14 @@ orakle.mid_term_lm <- function(midterm_all_data, training_set_ratio=0.2){
     dir.create(paste0("./",country,"/plots"))}
   if (! file.exists(paste0("./",country,"/models/midterm"))){ 
     dir.create(paste0("./",country,"/models/midterm"))} 
-  
+  suppressWarnings(
   if(MLmetrics::RMSE(testlasso,y_test) < MLmetrics::RMSE(testlm,y_test)){
     midterm_all_data$midterm_model_fit <- predict(best_model, s = best_lambda, newx = x_all)
     save(best_model,file=paste0("./",country,"/models/midterm/best_model.Rdata"))
   }else{
-    midterm_all_data$midterm_model_fit <- predict(globalmodel, newdata = test_data)
+    midterm_all_data$midterm_model_fit <- predict(globalmodel, newdata = midterm_all_data)
     save(globalmodel,file=paste0("./",country,"/models/midterm/best_model.Rdata"))
-  }
+  })
   
   years <- unique(midterm_all_data$year)
   index <- 1:length(years)
@@ -1001,7 +1174,7 @@ orakle.mid_term_lm <- function(midterm_all_data, training_set_ratio=0.2){
   
   
   mt_plot <- ggplot(midterm_all_data)+geom_line(aes(1:nrow(midterm_all_data),seasonal_avg_hourly_demand,color="actual"))+
-    geom_line(aes(1:nrow(midterm_all_data),midterm_model_fit,color="fitted"))+xlab("\nYear")+ylab("Avg Hourly Demand\n [MW]\n")+
+    geom_line(aes(1:nrow(midterm_all_data),midterm_model_fit,color="fitted"))+
     geom_vline(xintercept=training_set,linetype=2)+
     ggthemes::theme_foundation(base_size=14, base_family="sans")+
     xlab("\nDay")+ylab("Avg Hourly Demand\n [MW]\n")+
@@ -1033,7 +1206,7 @@ orakle.mid_term_lm <- function(midterm_all_data, training_set_ratio=0.2){
   
   
   mt_plot2 <- ggplot(midterm_all_data)+geom_line(aes(1:nrow(midterm_all_data),seasonal_avg_hourly_demand,color="actual"))+
-    geom_line(aes(1:nrow(midterm_all_data),midterm_model_fit,color="fitted"))+xlab("\nYear")+ylab("Avg Hourly Demand\n [MW]\n")+
+    geom_line(aes(1:nrow(midterm_all_data),midterm_model_fit,color="fitted"))+
     geom_vline(xintercept=training_set,linetype=2)+
     ggthemes::theme_foundation(base_size=14, base_family="sans")+
     xlab("\nDay")+ylab("Avg Hourly Demand\n [MW]\n")+
@@ -1074,4 +1247,210 @@ orakle.mid_term_lm <- function(midterm_all_data, training_set_ratio=0.2){
   print(mt_plot)
   
   return(midterm_all_data)
+}
+# Combined Model ----
+orakle.combine_models <- function(longterm_all_data_predicted,midterm_all_data_predicted,short_term_data_predicted){
+  
+  library(ggplot2)
+  library(patchwork)  
+  combined_model_results <- short_term_data_predicted[,1:8]
+  
+  combined_model_results$long_term_model <- 0
+  for (year in unique(combined_model_results$year)){
+    combined_model_results$long_term_model[combined_model_results$year==year]  <- 
+      longterm_all_data_predicted$longterm_model_predictions[longterm_all_data_predicted$year==year]
+  }
+  
+  
+  combined_model_results$mid_term_model <- 0
+  
+  
+  for (i in 1:nrow(midterm_all_data_predicted)){
+    combined_model_results$mid_term_model[((i-1)*24+1):(i*24)] <-
+      midterm_all_data_predicted$midterm_model_fit[i]
+  }
+  
+  combined_model_results$short_term_model <- short_term_data_predicted$short_term_lm_model_predictions
+  
+  combined_model_results$complete_model <- combined_model_results$long_term_model+
+    combined_model_results$mid_term_model + combined_model_results$short_term_model
+  
+  
+  training_set_ratio <- unique(longterm_all_data_predicted$training_set_ratio) 
+  year_training_set=nrow(longterm_all_data_predicted)- round(nrow(longterm_all_data_predicted)*training_set_ratio)
+  end_of_training_set=max(which(combined_model_results$year== longterm_all_data_predicted$year[year_training_set]))
+  
+  
+  
+  training_mape=MLmetrics::MAPE(combined_model_results$complete_model[1:end_of_training_set],combined_model_results$hourly_demand[1:end_of_training_set])
+  test_mape=MLmetrics::MAPE(combined_model_results$complete_model[(end_of_training_set+1):nrow(combined_model_results)],combined_model_results$hourly_demand[(end_of_training_set+1):nrow(combined_model_results)])
+  
+  RSQUARE_training = cor(combined_model_results$hourly_demand[1:end_of_training_set],combined_model_results$complete_model[1:end_of_training_set])^2
+  RSQUARE_test = cor(combined_model_results$hourly_demand[(end_of_training_set+1):nrow(combined_model_results)],combined_model_results$complete_model[(end_of_training_set+1):nrow(combined_model_results)])^2
+  
+  training_rmse=MLmetrics::RMSE(combined_model_results$complete_model[1:end_of_training_set],combined_model_results$hourly_demand[1:end_of_training_set])
+  test_rmse=MLmetrics::RMSE(combined_model_results$complete_model[(end_of_training_set+1):nrow(combined_model_results)],combined_model_results$hourly_demand[(end_of_training_set+1):nrow(combined_model_results)])
+  
+  cat("\n*** Final Model Metrics ***\n
+    MAPE\nTraining Set:",round(training_mape,4),"\nTest Set:    ",round(test_mape,4),"\n
+    RSQUARE\nTraining Set:",round(RSQUARE_training,4),"\nTest Set:    ",round(RSQUARE_test,4),"\n
+    ACCURACY\nTraining Set:",round((1-training_mape)*100,2),"%\nTest Set:    ",round((1-test_mape)*100,2),"%\n
+    RMSE\nTraining Set:",round(training_rmse,1),"MW\nTest Set:    ",round(test_rmse,1),"MW\n\n")
+  
+  
+  full_plot <- ggplot(combined_model_results)+geom_line(aes(date,hourly_demand,color="actual"))+
+    geom_line(aes(date,complete_model,color="fitted"))+xlab("\nYear")+ylab("Hourly Demand\n [MW]\n")+
+    geom_vline(xintercept=combined_model_results$date[end_of_training_set],linetype=2)+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("Hourly Demand\n [MW]\n")+
+    ggtitle(paste("Complete Model Results -",country,"\n"))+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())
+  
+  
+  
+  full_plot2 <- ggplot(combined_model_results)+geom_line(aes(date,hourly_demand,color="actual"))+
+    geom_line(aes(date,complete_model,color="fitted"))+xlab("\nYear")+ylab("Hourly Demand\n [MW]\n")+
+    geom_vline(xintercept=combined_model_results$date[end_of_training_set],linetype=2)+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("Hourly Demand\n [MW]\n")+
+    ggtitle(paste("Complete Model Results -",country,"\n"))+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())+
+    theme(axis.title=element_text(size=23))+
+    theme(legend.text=element_text(size=23))+
+    theme(axis.text=element_text(size=20))+
+    theme(plot.title = element_text(size=26))
+  
+  
+  if (! file.exists(country)){ 
+    dir.create(country)} 
+  if (! file.exists(paste0("./",country,"/plots"))){ 
+    dir.create(paste0("./",country,"/plots"))}
+  
+  ggsave(file=paste0("./",country,"/plots/complete_model_results.png"), plot=full_plot2, width=12, height=8)
+  
+  ###
+  sample_week_index <-nrow(combined_model_results)-(nrow(combined_model_results)-end_of_training_set)*0.45
+  
+  week_start <- which(combined_model_results$wday[sample_week_index:(sample_week_index+200)]==
+                        "Mon")[1]+sample_week_index
+  sample_year <- combined_model_results$year[week_start]
+  
+  full_plot_sample_week <- ggplot(combined_model_results[week_start:(week_start+335),])+geom_line(aes(date,hourly_demand,color="actual"))+
+    geom_line(aes(date,complete_model,color="fitted"))+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("[MW]\n")+
+    ggtitle(paste("Complete Model Results -",country),subtitle = paste("2 sample weeks in",sample_year,"\n") )+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())
+  
+  
+  
+  
+  full_plot_sample_week2 <- ggplot(combined_model_results[week_start:(week_start+335),])+geom_line(aes(date,hourly_demand,color="actual"))+
+    geom_line(aes(date,complete_model,color="fitted"))+
+    ggthemes::theme_foundation(base_size=14, base_family="sans")+
+    xlab("\nHour")+ylab("[MW]\n")+
+    ggtitle(paste("Complete Model Results -",country),subtitle = paste("2 sample weeks in",sample_year,"\n") )+
+    theme(plot.title = element_text(face = "bold",
+                                    size = rel(1.2), hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = rel(1)),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.text = element_text(), 
+          axis.line.x = element_line(colour="black"),
+          axis.line.y = element_line(colour="black"),
+          axis.ticks = element_line(),
+          panel.grid.major = element_line(colour="#f0f0f0"),
+          panel.grid.minor = element_blank(),
+          legend.key = element_rect(colour = NA),
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.key.size= unit(0.2, "cm"),
+          plot.margin=unit(c(10,5,5,5),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"))+
+    theme(legend.title = element_blank())+
+    theme(axis.title=element_text(size=23))+
+    theme(legend.text=element_text(size=23))+
+    theme(axis.text=element_text(size=20))+
+    theme(plot.title = element_text(size=26))+
+    theme(plot.subtitle = element_text(size=20,hjust = 0.5))
+  
+  ggsave(file=paste0("./",country,"/plots/complete_model_sample_weeks.png"), plot=full_plot_sample_week2, width=12, height=8)
+  
+  stacked_plots <- full_plot/full_plot_sample_week
+  print(stacked_plots)
+  print(full_plot_sample_week)
+  print(full_plot)
+  return(combined_model_results)
 }
