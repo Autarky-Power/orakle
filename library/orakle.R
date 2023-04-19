@@ -600,8 +600,8 @@ orakle.shortterm_lm_model <- function(short_term_data, training_set_ratio=0.2){
   
   print(st_plot)
 
-  week_start <- which(short_term_data$wday[(nrow(short_term_data2)/2):(nrow(short_term_data2)/2+200)]==
-                        "Mon")[1]+(nrow(short_term_data2)/2)
+  week_start <- which(short_term_data$wday[(nrow(short_term_data)/2):(nrow(short_term_data)/2+200)]==
+                        "Mon")[1]+(nrow(short_term_data)/2)
   sample_year <- short_term_data$year[week_start]
   
   st_plot_sample_week <- ggplot(short_term_data[week_start:(week_start+335),])+geom_line(aes(date,hourly_demand_trend_and_season_corrected,color="actual"))+
